@@ -1,1 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Carl Bingo</title>
 
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+}
+
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#10131a;
+  color:white;
+  text-align:center;
+}
+
+.container{
+  max-width:500px;
+  margin:auto;
+  padding:20px;
+}
+
+h1{
+  margin:5px 0 10px;
+  font-size:30px;
+}
+
+.user{
+  color:#aaa;
+  margin-bottom:20px;
+}
+
+.ball{
+  width:100px;
+  height:100px;
+  margin:15px auto;
+  border-radius:50%;
+  background:#ffcc00;
+  color:#111;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:42px;
+  font-weight:bold;
+  box-shadow:0 0 25px #ffcc0066;
+}
+
+button{
+  border:0;
+  border-radius:12px;
+  padding:14px 25px;
+  font-size:17px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.draw{
+  background:#00d084;
+  color:white;
+  width:100%;
+  margin:15px 0;
+}
+
+.reset{
+  background:#333;
+  color:white;
+  width:100%;
+}
+
+.board{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:7px;
+  margin-top:20px;
+}
+
+.cell{
+  aspect-ratio:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#202632;
+  border-radius:8px;
+  font-weight:bold;
+  font-size:17px;
+}
+
+.cell.marked{
+  background:#00d084;
+  color:white;
+}
+
+.cell.free{
+  background:#ffcc00;
+  color:#111;
+}
+
+.status{
+  margin:15px 0;
+  color:#aaa;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🎱 Carl Bingo</h1>
+
+<div class="user" id="user">
+Loading player...
+</div>
+
+<div class="ball" id="ball">--</div>
+
+<div class="status" id="status">
+Ready to play
+</div>
+
+<button class="draw" onclick="drawNumber()">
+🎲 DRAW NUMBER
+</button>
+
+<div class="board" id="board"></div>
+
+<button class="reset" onclick="resetGame()">
+🔄 RESET
+</button>
+
+</div>
+
+<script>
+
+const tg = window.Telegram.WebApp;
+
+tg.ready();
+tg.expand();
+
+let player = tg.initDataUnsafe?.user;
+
+if(player){
+  document.getElementById("user").innerText =
+    "👤 " + (player.first_name || "Player");
+}else{
+  document.getElementById("user").innerText =
+    "👤 Guest Player";
+}
+
+let numbers = [];
+let called = [];
+let card = [];
+
+function randomNumber(min,max){
+  return Math.floor(Math.random()*(max-min+1))+min;
+}
+
+function createCard(){
+
+  numbers = [];
+
+  while(numbers.length < 24){
+
+    let n = randomNumber(1,75);
+
+    if(!numbers.includes(n)){
+      numbers.push(n);
+    }
+  }
+
+  card = [
+    ...numbers.slice(0,12),
+    "FREE",
+    ...numbers.slice(12)
+  ];
+
+  renderCard();
+}
+
+function renderCard(){
+
+  const board = document.getElementById("board");
+
+  board.innerHTML = "";
+
+  card.forEach((num,index)=>{
+
+    const cell = document.createElement("div");
+
+    cell.className = "cell";
+
+    if(num === "FREE"){
+      cell.classList.add("free");
+      cell.innerText = "FREE";
+      cell.classList.add("marked");
+    }else{
+      cell.innerText = num;
+
+      if(called.includes(num)){
+        cell.classList.add("marked");
+      }
+    }
+
+    cell.onclick = () => markCell(index);
+
+    board.appendChild(cell);
+
+  });
+
+}
+
+function markCell(index){
+
+  const value = card[index];
+
+  if(value === "FREE"){
+    return;
+  }
+
+  if(!called.includes(value)){
+    tg.showAlert("❌ Number has not been called yet!");
+    return;
+  }
+
+  renderCard();
+  checkBingo();
+
+}
+
+function drawNumber(){
+
+  let available = [];
+
+  for(let i=1;i<=75;i++){
+
+    if(!called.includes(i)){
+      available.push(i);
+    }
+
+  }
+
+  if(available.length === 0){
+
+    tg.showAlert("All numbers have been called!");
+    return;
+
+  }
+
+  const index =
+    randomNumber(0,available.length-1);
+
+  const number = available[index];
+
+  called.push(number);
+
+  document.getElementById("ball").innerText =
+    number;
+
+  document.getElementById("status").innerText =
+    "Called numbers: " + called.length;
+
+  renderCard();
+
+  checkBingo();
+
+}
+
+function checkBingo(){
+
+  const marked = card.map((num)=>{
+    return num === "FREE" || called.includes(num);
+  });
+
+  for(let row=0;row<5;row++){
+
+    let win = true;
+
+    for(let col=0;col<5;col++){
+
+      if(!marked[row*5+col]){
+        win = false;
+      }
+
+    }
+
+    if(win){
+      bingoWin();
+      return;
+    }
+
+  }
+
+  for(let col=0;col<5;col++){
+
+    let win = true;
+
+    for(let row=0;row<5;row++){
+
+      if(!marked[row*5+col]){
+        win = false;
+      }
+
+    }
+
+    if(win){
+      bingoWin();
+      return;
+    }
+
+  }
+
+  let diagonal1 = true;
+  let diagonal2 = true;
+
+  for(let i=0;i<5;i++){
+
+    if(!marked[i*5+i])
+      diagonal1 = false;
+
+    if(!marked[i*5+(4-i)])
+      diagonal2 = false;
+
+  }
+
+  if(diagonal1 || diagonal2){
+    bingoWin();
+  }
+
+}
+
+function bingoWin(){
+
+  document.getElementById("status").innerText =
+    "🎉 BINGO! YOU WIN!";
+
+  tg.showPopup({
+    title:"🎉 BINGO!",
+    message:"Congratulations! You completed Bingo!",
+    buttons:[
+      {
+        id:"ok",
+        type:"ok"
+      }
+    ]
+  });
+
+}
+
+function resetGame(){
+
+  called = [];
+
+  document.getElementById("ball").innerText =
+    "--";
+
+  document.getElementById("status").innerText =
+    "Ready to play";
+
+  createCard();
+
+}
+
+createCard();
+
+</script>
+
+</body>
+</html>
